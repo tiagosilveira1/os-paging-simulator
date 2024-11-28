@@ -53,16 +53,6 @@ typedef struct
     Frame *frames;
 } PhysicalMemory;
 
-/* Process: estrutura do processo
-   'process_id': identificador unico do processo 
-   'total_of_pages': numero total de paginas do processo
-   'page_table': tabela de paginas do processo */
-typedef struct {
-    int process_id;
-    int total_of_pages;
-    PageTable page_table;
-} Process;
-
 /* VirtualMemory: estrutura da memoria virtual
    'process_id': identificador unico do processo
    'total_of_pages': numero total de paginas do processo
@@ -194,10 +184,10 @@ void handle_page_fault(PhysicalMemory *physical_memory, VirtualMemory *virtual_m
     log_operation(log_msg);
 }
 
-/* translate_address: funcao auxiliar para realizar a traducao de enderecos virtuais para fisicos
+/* page_frame_allocated: funcao auxiliar para retornar frame alocado da página (-1 caso não esteja em nenhum frame)
    'virtual_memory': memoria virtual
    'page_id': identificador unico da pagina */
-int translate_address(VirtualMemory *virtual_memory, int page_id)
+int page_frame_allocated(VirtualMemory *virtual_memory, int page_id)
 {
     // Verifica se o page_id esta dentro do intervalo valido (obs: provavelmente nao utilizado, pois o check ja e feito em 'allocate_page')
     if (page_id < 0 || page_id >= virtual_memory->total_of_pages)
@@ -247,7 +237,7 @@ void allocate_page(PhysicalMemory *physical_memory, VirtualMemory *virtual_memor
     }
 
     // Traduz o endereco logico (page_id) para o endereco fisico (frame_id)
-    int frame_id = translate_address(virtual_memory, page_id);
+    int frame_id = page_frame_allocated(virtual_memory, page_id);
 
     printf("Debug: allocate_page - Processo #%d, Pagina #%d, Frame ID retornado = %d\n",
            virtual_memory->process_id, page_id, frame_id);
@@ -259,7 +249,7 @@ void allocate_page(PhysicalMemory *physical_memory, VirtualMemory *virtual_memor
         
         handle_page_fault(physical_memory, virtual_memory, page_id, sleep_time);
 
-        frame_id = translate_address(virtual_memory, page_id);
+        frame_id = page_frame_allocated(virtual_memory, page_id);
 
         if (frame_id != -1)
             printf("Pagina #%d do Processo #%d mapeada para Frame #%d apos Page Fault.\n", page_id, virtual_memory->process_id, frame_id);
@@ -413,14 +403,14 @@ int main()
     {
         if (sscanf(buffer, "%s = %d", key, &value))
         {
-            if (strcmp(key, "frame_size") == 0)
-                total_of_frames = value;
+            if (strcmp(key, "total_frames") == 0)
+                total_of_frames = value; //TOTAL DE FRAMES NA MEMÓRIA FÍSICA
             else if (strcmp(key, "page_size") == 0)
                 total_of_pages = value;
             else if (strcmp(key, "processes") == 0)
-                total_of_processes = value;
+                total_of_processes = value; //TOTAL DE PROCESSOS
             else if (strcmp(key, "sleep_time") == 0)
-                sleep_time = value;
+                sleep_time = value; //TEMPO DE ESPERA PARA ACESSAR MEMÓRIA SECUNDÁRIA
         }
     }
     
@@ -437,6 +427,10 @@ int main()
     sleep(1);
 
     int menu_option;
+    int found;
+    int terminated = 0;
+    int displayed = 0;
+    int pid, total_pages = 0;
     VirtualMemory running_processes[total_of_processes];
 
     while (1)
@@ -469,11 +463,11 @@ int main()
                 break;
             }
 
-            int pid, total_pages;
+            pid, total_pages = 0;
             printf("---\nInsira o ID do Processo e o Total de Paginas (pid total): ");
             scanf("%d %d", &pid, &total_pages);
             
-            while (total_of_pages <= 0) {
+            while (total_pages <= 0) {
             	printf("---\nERRO: O numero total de paginas deve ser maior que zero!\n");
                 printf("\nInsira o ID do Processo e o Total de Paginas (pid total): ");
                 scanf("%d %d", &pid, &total_pages);
@@ -491,7 +485,8 @@ int main()
             int process_id, page_id;
             scanf("%d %d", &process_id, &page_id);
 
-            int found = 0;
+            found = 0;
+            
             for (int i = 0; i < processes_idx; i++)
             {
                 if (running_processes[i].process_id == process_id)
@@ -512,7 +507,6 @@ int main()
             int terminate_pid;
             scanf("%d", &terminate_pid);
 
-            int terminated = 0;
             for (int i = 0; i < processes_idx; i++) {
                 if (running_processes[i].process_id == terminate_pid) {
                     terminate_process(&physical_memory, &running_processes[i]);
@@ -538,7 +532,6 @@ int main()
             int display_pid;
             scanf("%d", &display_pid);
 
-            int displayed = 0;
             for (int i = 0; i < processes_idx; i++) {
                 if (running_processes[i].process_id == display_pid) {
                     display_virtual_memory_status(&running_processes[i]);
